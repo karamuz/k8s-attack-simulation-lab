@@ -1,0 +1,264 @@
+driver:
+  kind: modern-bpf
+
+falcosidekick:
+  enabled: true
+  webui:
+    enabled: true
+  config:
+    talon:
+      address: http://falco-talon:2803   # <-- critical so events reach Talon
+
+customRules:
+  custom-rules.yaml: |-
+    # --- Initial Access & Execution ---
+    - rule: Privileged Pod with Root Filesystem Mount
+      desc: Detects a privileged container mounting the host's root filesystem ("/").
+      # Container start event + privileged + a mount whose SOURCE is "/" (host root)
+      condition: (evt.type=container) and container.privileged=true and (container.mount.source[/] != "")
+      output: "Privileged container with host rootfs mount started (pod=%k8s.pod.name container=%container.id image=%container.image.repository src=/)"
+      priority: CRITICAL
+      tags: [k8s, misconfiguration]
+
+    # --- Persistence ---
+    - rule: Cron Job Planted for Persistence
+      desc: Detects a process modifying cron to establish persistence.
+      condition: open_write and (fd.name contains "/etc/cron" or fd.name="/etc/crontab")
+      output: "Cron modified for potential persistence (cmd=%proc.cmdline file=%fd.name pod=%k8s.pod.name container=%container.id)"
+      priority: ERROR
+      tags: [filesystem, persistence]
+
+    - list: trusted_base_images
+      items: []
+
+    - rule: Suspicious LD_PRELOAD Modification
+      desc: Detects a write to /etc/ld.so.preload (process hijacking).
+      condition: open_write and fd.name="/etc/ld.so.preload" and not (container.image.repository in (trusted_base_images))
+      output: "/etc/ld.so.preload modified (cmd=%proc.cmdline pod=%k8s.pod.name container=%container.id)"
+      priority: CRITICAL
+      tags: [filesystem, persistence, evasion]
+
+    # --- Privilege Escalation ---
+    - rule: Container Escape via Chroot
+      desc: Detects chroot into a host mount path from a container.
+      condition: evt.type=chroot and proc.args contains "/host" and container.id != host
+      output: "Potential container escape via chroot (cmd=%proc.cmdline pod=%k8s.pod.name container=%container.id)"
+      priority: CRITICAL
+      tags: [process, escape]
+
+    # --- Defense Evasion ---
+    - rule: File Attribute Modification
+      desc: Detects removing immutable flag via chattr -i.
+      condition: (evt.type=execve and evt.dir=<) and proc.name="chattr" and proc.args contains "-i"
+      output: "File attributes modified with chattr (cmd=%proc.cmdline pod=%k8s.pod.name container=%container.id)"
+      priority: WARNING
+      tags: [process, evasion]
+
+    - rule: Hidden Directory Creation
+      desc: Detects creation of suspicious hidden dirs.
+      condition: evt.type=mkdir and (fd.name contains "/.../" or fd.name contains "/dev/shm/." or fd.name contains "/tmp/.")
+      output: "Suspicious hidden directory created (path=%fd.name pod=%k8s.pod.name container=%container.id)"
+      priority: WARNING
+      tags: [filesystem, evasion]
+
+    - rule: Masquerading as Python Script
+      desc: ELF/binary masquerading as a .py script (heuristic).
+      # We can't test ELF-ness; instead flag any exec of a .py path NOT run by python*
+      condition: (evt.type=execve and evt.dir=<) and (proc.exepath endswith ".py") and not (proc.name in (python, python3))
+      output: "Masquerading: non-python executable launched from .py path (exe=%proc.exepath name=%proc.name pod=%k8s.pod.name container=%container.id)"
+      priority: ERROR
+      tags: [process, evasion]
+
+    - rule: Command History Deletion
+      desc: Detects clearing bash history.
+      condition: (evt.type=execve and evt.dir=<) and ((proc.name="cat" and proc.args contains "/dev/null" and proc.args contains "bash_history") or (proc.name="history" and proc.args contains "-c"))
+      output: "Command history cleared (cmd=%proc.cmdline pod=%k8s.pod.name container=%container.id)"
+      priority: WARNING
+      tags: [process, evasion]
+
+    - rule: Read Shadow File via Symlink
+      desc: Reads of /etc/shadow by common readers.
+      condition: (open_read) and (fd.name contains "/etc/shadow") and proc.name in (wc, cat, head, tail)
+      output: "/etc/shadow read (cmd=%proc.cmdline file=%fd.name pod=%k8s.pod.name container=%container.id)"
+      priority: ERROR
+      tags: [filesystem, evasion, credentials]
+
+    # --- Credential Access ---
+    - rule: K8s Token Read by Shell or Script
+      desc: ServiceAccount token read by shell/script.
+      condition: (open_read or open_write) and fd.name contains "serviceaccount/token" and proc.name in (bash, sh, python, python3, cat)
+      output: "K8s service account token read (cmd=%proc.cmdline file=%fd.name pod=%k8s.pod.name container=%container.id)"
+      priority: ERROR
+      tags: [filesystem, k8s, credentials]
+
+    - rule: Cloud Credential Discovery
+      desc: Grepping for secrets or listing AWS config.
+      condition: (evt.type=execve and evt.dir=<) and ((proc.name="aws" and proc.args contains "configure list") or (proc.name="grep" and proc.args contains "-iE" and proc.args contains "SECRET"))
+      output: "Cloud credential discovery command executed (cmd=%proc.cmdline pod=%k8s.pod.name container=%container.id)"
+      priority: ERROR
+      tags: [process, credentials]
+
+    # --- Discovery & C2 ---
+    - rule: Network Port Scan with Python
+      desc: Python process making many connects (heuristic).
+      condition: (evt.type=connect and evt.dir=<) and proc.name in (python, python3)
+      output: "Potential port scan from Python (pod=%k8s.pod.name container=%container.id)"
+      priority: WARNING
+      tags: [network, discovery]
+
+    - rule: Outbound Connection to Suspicious Port
+      desc: Reverse shell-ish ports.
+      condition: (evt.type=connect and evt.dir=<) and fd.type in (ipv4, ipv6) and proc.name in (bash, sh, python, python3, nc, netcat) and fd.rport in (4444, 7456)
+      output: "Outbound connection to suspicious port (cmd=%proc.cmdline conn=%fd.name pod=%k8s.pod.name)"
+      priority: CRITICAL
+      tags: [network, c2]
+
+    # --- Exfiltration & Impact ---
+    - rule: Data Exfiltration via Python
+      desc: Python sending data over TCP (heuristic).
+      condition: (evt.type=sendto and evt.dir=<) and proc.name in (python, python3) and fd.l4proto=tcp
+      output: "Potential exfiltration via Python sendto (pod=%k8s.pod.name container=%container.id)"
+      priority: ERROR
+      tags: [network, exfiltration]
+
+    - rule: Cryptominer Process Detected
+      desc: Detects execution of xmx2 cryptominer.
+      condition: (evt.type=execve and evt.dir=<) and (proc.name="xmx2" or proc.cmdline contains "xmx2")
+      output: "Cryptominer process detected (cmd=%proc.cmdline pod=%k8s.pod.name container=%container.id)"
+      priority: CRITICAL
+      tags: [process, impact]
+
+# Deploy Falco Talon via the Falco chart
+responseActions:
+  enabled: true
+
+falco-talon:
+  service:
+    type: ClusterIP
+    port: 2803
+
+  # Talon configuration
+  config:
+    watchRules: true
+    debug: true
+    printAllEvents: true
+    rulesOverride: |
+      # ----- Reusable actions -----
+      # ---------- Rule 1: Exfiltration via Python ----------
+      - rule: Exfiltration via Python
+        description: Detect Python sending data over TCP - capture + isolate egress
+        match:
+          rules:
+            - Data Exfiltration via Python
+        actions:
+          - action: Collect last logs
+            actionner: kubernetes:log
+            parameters:
+              tail_lines: 500
+          - action: Tcpdump capture
+            actionner: kubernetes:tcpdump
+            parameters:
+              duration: 15
+              interface: any
+              filename: "tcpdump.pcap"
+            output:
+              target: local:file
+              parameters:
+                destination: /tmp
+          - action: Isolate egress
+            actionner: kubernetes:networkpolicy
+            parameters:
+              allow_cidr:
+                - "10.0.0.0/8"
+                - "172.16.0.0/12"
+                - "192.168.0.0/16"
+              allow_namespaces:
+                - "kube-system"
+          - action: Label suspicious pod
+            actionner: kubernetes:label
+            parameters:
+              labels:
+                falco.remediated: "true"
+                falco.reason: "exfil"
+
+      # ---------- Rule 2: C2 / Suspicious outbound port ----------
+      - rule: C2 outbound connection detected
+        description: Outbound connect to suspicious ports (reverse shell / C2)
+        match:
+          rules:
+            - Outbound Connection to Suspicious Port
+        actions:
+          - action: Collect last logs
+            actionner: kubernetes:log
+            parameters:
+              tail_lines: 500
+          - action: Isolate egress
+            actionner: kubernetes:networkpolicy
+            parameters:
+              allow_cidr:
+                - "10.0.0.0/8"
+                - "172.16.0.0/12"
+                - "192.168.0.0/16"
+          - action: Tcpdump capture
+            actionner: kubernetes:tcpdump
+            parameters:
+              duration: 15
+              interface: any
+              filename: "tcpdump.pcap"
+            output:
+              target: local:file
+              parameters:
+                destination: /tmp/falco-talon/artifacts/
+          - action: Label suspicious pod
+            actionner: kubernetes:label
+            parameters:
+              labels:
+                falco.remediated: "true"
+                falco.reason: "c2"
+          # (optional) kill after you validate:
+          # - action: Terminate pod (last resort)
+          #   actionner: kubernetes:terminate
+          #   parameters:
+          #     ignore_daemonsets: true
+          #     ignore_statefulsets: true
+          #     grace_period_seconds: 0
+
+      # ---------- Rule 3: ServiceAccount token read ----------
+      - rule: ServiceAccount token read detected
+        description: SA token read by shell/script — collect artifact & isolate
+        match:
+          rules:
+            - K8s Token Read by Shell or Script
+        actions:
+          - action: Collect last logs
+            actionner: kubernetes:log
+            parameters:
+              tail_lines: 500
+          - action: Isolate egress
+            actionner: kubernetes:networkpolicy
+            parameters:
+              allow_cidr:
+                - "10.0.0.0/8"
+                - "172.16.0.0/12"
+                - "192.168.0.0/16"
+          - action: Download SA token
+            actionner: kubernetes:download
+            parameters:
+              file: "/var/run/secrets/kubernetes.io/serviceaccount/token"
+            output:
+              target: local:file
+              parameters:
+                destination: /tmp
+          - action: Label suspicious pod
+            actionner: kubernetes:label
+            parameters:
+              labels:
+                falco.remediated: "true"
+                falco.reason: "sa-token"
+
+  # Simple NATS (JetStream) for Minikube stability
+  nats:
+    enabled: true
+    jetstream:
+      enabled: true
+    replicaCount: 1

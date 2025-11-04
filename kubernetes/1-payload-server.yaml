@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payload-server
+  namespace: default
+  labels:
+    app: payload-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: payload-server
+  template:
+    metadata:
+      labels:
+        app: payload-server
+    spec:
+      containers:
+      - name: payload-server
+        image: payload-server:latest
+        imagePullPolicy: Never # Use local image
+        securityContext:
+          privileged: true
+        ports:
+        - containerPort: 8080
+        - containerPort: 4444
+        - containerPort: 7456
+        - containerPort: 4445
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payload-server
+  namespace: default
+spec:
+  selector:
+    app: payload-server
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  - name: shell1
+    port: 4444
+    targetPort: 4444
+  - name: shell2
+    port: 7456
+    targetPort: 7456
+  - name: echo
+    port: 4445
+    targetPort: 4445

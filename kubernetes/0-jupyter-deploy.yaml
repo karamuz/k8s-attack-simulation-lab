@@ -1,0 +1,47 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: misconfigured-jupyter
+  labels:
+    app: misconfigured-jupyter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: misconfigured-jupyter
+  template:
+    metadata:
+      labels:
+        app: misconfigured-jupyter
+      annotations:
+        container.apparmor.security.beta.kubernetes.io/jupyter: unconfined
+    spec:
+      serviceAccountName: default
+      containers:
+      - name: jupyter
+        image: insecure-jupyter
+        imagePullPolicy: Never
+        securityContext:
+          privileged: true
+          runAsUser: 0
+          allowPrivilegeEscalation: true
+          capabilities:
+            add: ["ALL"]
+        env:
+        - name: NB_USER
+          value: root
+        - name: NB_UID
+          value: "0"
+        - name: NB_GID
+          value: "0"
+        args: ["start-notebook.sh", "--NotebookApp.token=''", "--NotebookApp.password=''", "--allow-root"]
+        ports:
+        - containerPort: 8888
+        volumeMounts:
+        - name: host-root
+          mountPath: /host
+      volumes:
+      - name: host-root
+        hostPath:
+          path: /

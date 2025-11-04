@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-payload-access
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: attack-sim
+  policyTypes:
+  - Egress
+  - Ingress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: payload-server
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 4444
+    - protocol: TCP
+      port: 7456
+  # Allow all other outbound traffic for downloading tools etc.
+  - {}
+  ingress:
+  # Allow all inbound traffic for potential reverse connections or tests
+  - {}

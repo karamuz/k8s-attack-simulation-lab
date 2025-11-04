@@ -1,0 +1,17 @@
+{
+    "autosave": false,
+    "cpu": true,
+    "opencl": false,
+    "cuda": false,
+    "pools": [
+        {
+            "url": "127.0.0.1:3333",
+            "user": "44tLjmXrQGQPJgWF2S2gL2b5zpsT6Nve2vdp2aVf3S2aVf3S2aVf3S2aVf3S2aVf3S2aVf3S2aVf3S2aVf3S2aV",
+            "keepalive": true,
+            "tls": false
+        }
+    ],
+    "print-time": 10,
+    "log-file": null,
+    "background": false
+}

