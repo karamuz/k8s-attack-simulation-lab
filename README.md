@@ -13,7 +13,7 @@ A comprehensive hands-on lab demonstrating real-world Kubernetes security threat
 - [Metrics Collection & Analysis](#metrics-collection--analysis)
 - [Attack Techniques (MITRE ATT&CK)](#attack-techniques-mitre-attck)
 - [Cleanup](#cleanup)
-- [Troubleshooting](#troubleshooting)s
+- [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -548,5 +548,3 @@ This lab is for **educational purposes only**. The techniques demonstrated shoul
 - [Kubernetes Security Best Practices](https://kubernetes.io/docs/concepts/security/)
 
 ---
-
-**Happy Learning! 🎓🔒**
