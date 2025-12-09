@@ -40,9 +40,9 @@ The lab uses **Falco** for runtime threat detection with custom rules and **Falc
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Minikube Cluster                          │
+│                    Minikube Cluster                         │
 ├─────────────────────────────────────────────────────────────┤
-│                                                               │
+│                                                             │
 │  ┌──────────────────┐         ┌──────────────────┐          │
 │  │ Jupyter Notebook │         │ Payload Server   │          │
 │  │ (Vulnerable)     │────────▶│ (C2 Server)      │          │
@@ -50,23 +50,23 @@ The lab uses **Falco** for runtime threat detection with custom rules and **Falc
 │  │ - Host mount /   │         │ - Receives data  │          │
 │  │ - cluster-admin  │         │ - Reverse shells │          │
 │  └──────────────────┘         └──────────────────┘          │
-│          │                                                    │
-│          │ Deploys                                           │
-│          ▼                                                    │
-│  ┌──────────────────┐                                        │
-│  │ Attack-Sim Pod   │                                        │
-│  │ - Privileged     │                                        │
-│  │ - Host mount /   │                                        │
-│  │ - Multi-stage    │                                        │
-│  └──────────────────┘                                        │
-│                                                               │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │            Falco Security Stack                       │   │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────────────┐  │   │
-│  │  │  Falco   │─▶│  Talon   │─▶│  Sidekick UI     │  │   │
-│  │  │ (Detect) │  │(Response)│  │  (Dashboard)     │  │   │
-│  │  └──────────┘  └──────────┘  └──────────────────┘  │   │
-│  └─────────────────────────────────────────────────────┘   │
+│          │                                                  │
+│          │ Deploys                                          │
+│          ▼                                                  │
+│  ┌──────────────────┐                                       │
+│  │ Attack-Sim Pod   │                                       │
+│  │ - Privileged     │                                       │
+│  │ - Host mount /   │                                       │
+│  │ - Multi-stage    │                                       │
+│  └──────────────────┘                                       │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │            Falco Security Stack                     │    │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────────────┐   │    │
+│  │  │  Falco   │─▶│  Talon   │─▶│  Sidekick UI     │   │    │
+│  │  │ (Detect) │  │(Response)│  │  (Dashboard)     │   │    │
+│  │  └──────────┘  └──────────┘  └──────────────────┘   │    │
+│  └─────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────┘
 ```
 
